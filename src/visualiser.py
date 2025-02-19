@@ -1,7 +1,7 @@
 from mujoco import viewer
 import time
 import mujoco
-import numpy as np 
+import numpy as np
 
 def rf(x):
     return round(float(x), 2)
@@ -27,3 +27,4 @@ def visualise_traj_generic(x, d: mujoco.MjData, m: mujoco.MjModel, sleep=0.01):
             time_until_next_step = m.opt.timestep - (time.time() - step_start)
             if time_until_next_step > 0:
                 time.sleep(time_until_next_step)
+
