@@ -13,7 +13,7 @@ def main():
 
     states, jacobians = simulate(mjx_data=mjx_data,
                                  num_steps=config.steps,
-                                 step_function=step_fn)
+                                 step_function=step_fn_fd)
 
     # convert the states and jacobians to numpy arrays
     states = np.array(states)
@@ -26,8 +26,8 @@ def main():
     # Save the states and jacobians into files for later use
     current_directory = os.path.dirname(os.path.realpath(__file__))
     stored_data_directory = os.path.join(current_directory, 'stored_data')
-    np.save(os.path.join(stored_data_directory, 'states.npy'), states)
-    np.save(os.path.join(stored_data_directory, 'jacobians.npy'), jacobians)
+    np.save(os.path.join(stored_data_directory, 'states_fd.npy'), states)
+    np.save(os.path.join(stored_data_directory, 'jacobians_fd.npy'), jacobians)
 
     print("States and Jacobians saved to stored_data directory")
 
