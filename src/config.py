@@ -5,7 +5,7 @@ import jax.numpy as jnp
 @dataclass
 class Config:
     simulation_time: float = 1.0    # Duration of simulation
-    steps: int = 10               # Number of simulation steps
+    steps: int = 1000               # Number of simulation steps
     elasticity: float = 1.0         # Coefficient of restitution
     radius: float = 0.1             # Radius of the ball
     init_pos: jnp.ndarray = jnp.array([-1.0, 1.0])  # Initial position of the ball
