@@ -19,6 +19,17 @@ def make_step_fn(model, mjx_data):
 
     return step_fn
 
+# --- Auto-Differentiation for the Puhser ----
+def make_step_fn_pusher(model, mjx_data):
+
+    @jax.jit
+    def step_fn(dx):
+        # dx is your current mjx_data object (or a JAX-pytree with fields like qpos and qvel)
+        dx_next = mjx.step(model, dx)
+        return dx_next
+
+    return step_fn
+
 # --- Finite Differences ---
 def make_step_fn_fd(mjx_model, mjx_data):
     epsilon = 1e-5
@@ -65,12 +76,25 @@ def make_step_fn_fd(mjx_model, mjx_data):
     step_fn.defvjp(step_fn_fwd, step_fn_bwd)
     return step_fn
 
-# --- Compute Jacobians Functions using JAX ---
-#step_fn = make_step_fn(mjx_model)
-#jac_fn = jax.jit(jacfwd(step_fn))  # Forward-mode is safer for loops
+def simulate_pusher(mjx_data, num_steps, step_function):
 
-#step_fn_fd = make_step_fn_fd()
-#jac_fn_rev = jax.jit(jax.jacrev(step_fn_fd))
+    dx = mjx_data
+    qpos = dx.qpos
+    qvel = dx.qvel
+    state = jnp.concatenate([qpos, qvel])
+    states = [state]
+    dxs = [dx]
+
+
+    for _ in range(num_steps):
+
+        dx_next = step_function(dx)
+        dxs.append(dx_next)
+        state_next = jnp.concatenate([dx_next.qpos, dx_next.qvel])
+        states.append(state_next)
+
+    return states
+
 
 def simulate(mjx_data, num_steps, step_function):
     state = jnp.concatenate([mjx_data.qpos, mjx_data.qvel])
@@ -83,10 +107,10 @@ def simulate(mjx_data, num_steps, step_function):
 
     for _ in range(num_steps):
         # Compute Jacobian BEFORE stepping (gradient of NEXT state w.r.t. CURRENT state)
-        J_s = jac_fn(state)
+        #J_s = jac_fn(state)
         #J_s = jac_fn_rev(state)
 
-        state_jacobians.append(J_s)
+        #state_jacobians.append(J_s)
 
         # Step forward
         state = step_function(state)
@@ -95,3 +119,55 @@ def simulate(mjx_data, num_steps, step_function):
     return states, state_jacobians
 
 
+def simulate_(mjx_data, num_steps, step_function):
+    # Construct the initial state from the data.
+    init_state = jnp.concatenate([mjx_data.qpos, mjx_data.qvel])
+    state_dim = init_state.shape[0]
+    # Assume the Jacobian is square (state_dim x state_dim)
+    jac_shape = (state_dim, state_dim)
+
+    # Compile the reverse-mode Jacobian of the step function.
+    jac_fn_rev = jax.jit(jax.jacrev(step_function))
+
+    # Pre-allocate output arrays:
+    # Trajectory: store num_steps+1 states (including initial state)
+    traj = jnp.zeros((num_steps + 1, state_dim))
+    # Jacobians: store num_steps Jacobians (one per step)
+    jac_arr = jnp.zeros((num_steps, state_dim, state_dim))
+
+    # Set the initial state as the first element in the trajectory.
+    traj = traj.at[0].set(init_state)
+
+    def body_fun(i, carry):
+        """
+        i: loop index (an integer)
+        carry: tuple (current_state, traj, jac_arr)
+
+        In each iteration:
+          - Compute the Jacobian at the current state.
+          - Take one simulation step.
+          - Record the new state and Jacobian in our pre-allocated arrays.
+        """
+        state, traj, jac_arr = carry
+        # Compute the Jacobian at the current state.
+        J_s = jac_fn_rev(state)
+        # Compute the next state.
+        new_state = step_function(state)
+        # Record the new state in the trajectory at position i+1.
+        traj = traj.at[i + 1].set(new_state)
+        # Record the computed Jacobian for this step at index i.
+        jac_arr = jac_arr.at[i].set(J_s)
+        # Return the updated carry.
+        return (new_state, traj, jac_arr)
+
+    # Ensure that num_steps is a concrete Python integer.
+    num_steps = int(num_steps)
+    # Use lax.fori_loop with static start (0) and stop (num_steps).
+    final_carry = jax.lax.fori_loop(0, num_steps, body_fun, (init_state, traj, jac_arr))
+    final_state, traj, jac_arr = final_carry
+    return traj, jac_arr
+
+# Example usage:
+# Assuming mjx_data is provided and step_function is defined,
+# and num_steps is, for example, 100 (a static int).
+# traj, jac_arr = simulate(mjx_data, 100, step_function)
