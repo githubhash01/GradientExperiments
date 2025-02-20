@@ -76,6 +76,29 @@ def make_step_fn_fd(mjx_model, mjx_data):
     step_fn.defvjp(step_fn_fwd, step_fn_bwd)
     return step_fn
 
+def simulate_finger(mjx_data, num_steps, step_function):
+
+    dx = mjx_data
+    qpos = dx.qpos
+    qvel = dx.qvel
+
+    print(qpos, qvel)
+    state = jnp.concatenate([qpos, qvel])
+    print(state)
+    states = [state]
+    dxs = [dx]
+
+    for _ in range(num_steps):
+
+        dx_next = step_function(dx)
+        #print(dx_next)
+        dxs.append(dx_next)
+        state_next = jnp.concatenate([dx_next.qpos, dx_next.qvel])
+        states.append(state_next)
+
+    return states
+
+
 def simulate_pusher(mjx_data, num_steps, step_function):
 
     dx = mjx_data
@@ -94,7 +117,6 @@ def simulate_pusher(mjx_data, num_steps, step_function):
         states.append(state_next)
 
     return states
-
 
 def simulate(mjx_data, num_steps, step_function):
     state = jnp.concatenate([mjx_data.qpos, mjx_data.qvel])
